@@ -1,23 +1,30 @@
 import cv2
 import numpy as np
 import os
-import base64
-from flask import Flask, render_template, request, jsonify
-from werkzeug.utils import secure_filename
-import tempfile # นำเข้า tempfile เพื่อจัดการไฟล์ชั่วคราว
+from flask import Flask, render_template, request, jsonify # ... import ที่เหลือ
 
 # --- Flask Configuration ---
 app = Flask(__name__)
-# อนุญาตเฉพาะนามสกุลไฟล์ภาพ
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+# ... ส่วน ALLOWED_EXTENSIONS และ allowed_file
 
-# ตรวจสอบนามสกุลไฟล์
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# --- 1. ROUTE หน้าหลัก ---
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+# --- 2. ROUTE สำหรับการประมวลผล ---
+@app.route("/analyze", methods=["POST"])
+def analyze_droplets():
+    # ... โค้ดทั้งหมดที่รับไฟล์ อัปโหลด และเรียก analyze_droplets_core
+    
+    # ตัวอย่างโค้ด:
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    # ... โค้ดส่วนที่เหลือ
 
 # --- Core Analysis Function ---
 def analyze_droplets_core(img, paper_width, paper_height):
+# ... โค้ดวิเคราะห์หยดน้ำ
     """
     ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง และส่งผลลัพธ์พร้อมภาพกลับมา
     """
