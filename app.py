@@ -1,35 +1,28 @@
 import cv2
 import numpy as np
 import os
-from flask import Flask, render_template, request, jsonify # ... import ที่เหลือ
+import base64
+from flask import Flask, render_template, request, jsonify
+from werkzeug.utils import secure_filename
+import tempfile # นำเข้า tempfile เพื่อจัดการไฟล์ชั่วคราว
 
 # --- Flask Configuration ---
 app = Flask(__name__)
-# ... ส่วน ALLOWED_EXTENSIONS และ allowed_file
+# อนุญาตเฉพาะนามสกุลไฟล์ภาพ
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
-# --- 1. ROUTE หน้าหลัก ---
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-# --- 2. ROUTE สำหรับการประมวลผล ---
-@app.route("/analyze", methods=["POST"])
-def analyze_droplets():
-    # ... โค้ดทั้งหมดที่รับไฟล์ อัปโหลด และเรียก analyze_droplets_core
-    
-    # ตัวอย่างโค้ด:
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    # ... โค้ดส่วนที่เหลือ
+# ตรวจสอบนามสกุลไฟล์
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- Core Analysis Function ---
 def analyze_droplets_core(img, paper_width, paper_height):
-# ... โค้ดวิเคราะห์หยดน้ำ
     """
     ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง และส่งผลลัพธ์พร้อมภาพกลับมา
     """
     
-    # 1. ปรับ contrast ด้วย CLAHE (เหมือนเดิม)
+    # 1. ปรับ contrast ด้วย CLAHE
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
@@ -63,7 +56,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
         cx = x + w//2
         cy = y + h//2
         cv2.putText(output, str(i+1), (cx-10, cy), cv2.FONT_HERSHEY_SIMPLEX,
-                     0.6, (255, 0, 0), 2, cv2.LINE_AA)
+                    0.6, (255, 0, 0), 2, cv2.LINE_AA)
     text = f"Droplets detected: {count}"
     cv2.putText(output, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 3, cv2.LINE_AA)
 
@@ -165,7 +158,4 @@ def analyze():
             "output_image": f"data:image/jpeg;base64,{output_img_b64}"
         })
 
-    return jsonify({"error": "นามสกุลไฟล์ไม่ได้รับอนุญาต (ใช้ได้เฉพาะ png, jpg, jpeg)"}), 400
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    return jsonify({"error": "นามสกุลไฟล์ไม่ได้รับอนุญาต (ใช้ได้เฉพาะ png, jpg, jpeg)"}),
