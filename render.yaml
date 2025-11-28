@@ -1,0 +1,11 @@
+# Example Render service configuration
+# You can import this file into Render.com when creating a new service
+services:
+  - type: web
+    name: droplet-analyzer
+    repo: itgxxdday/siraphat
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT
+    env: python
+    plan: free

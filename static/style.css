@@ -1,0 +1,55 @@
+/* Custom Styles for Droplet Analyzer */
+
+body {
+    background-color: #f8f9fa; /* Light background */
+}
+
+/* Header with nice background color */
+header {
+    background: linear-gradient(135deg, #1e90ff, #0056b3); /* Dodger Blue to Dark Blue */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Custom Data Boxes for results */
+.data-box {
+    padding: 15px;
+    background-color: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.data-box:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.data-box strong {
+    display: block;
+    font-size: 0.9em;
+    color: #495057;
+    margin-top: 5px;
+}
+
+.data-box span {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #000000;
+}
+
+/* Efficacy Box Customization */
+#efficacyBox {
+    background: linear-gradient(45deg, #28a745, #218838); /* Default: Success green */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Color adjustments for efficacy based on result */
+.bg-success { background: linear-gradient(45deg, #28a745, #218838) !important; } /* Excellent */
+.bg-info { background: linear-gradient(45deg, #17a2b8, #138496) !important; }     /* Good */
+.bg-warning { background: linear-gradient(45deg, #ffc107, #d39e00) !important; }  /* Fair */
+.bg-danger { background: linear-gradient(45deg, #dc3545, #c82333) !important; }   /* Poor */
+
+.sticky-top {
+    top: 20px; /* Offset for better viewing */
+}

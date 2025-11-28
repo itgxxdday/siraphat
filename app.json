@@ -1,0 +1,16 @@
+{
+  "name": "droplet-analyzer",
+  "description": "Droplet Image Analyzer: Flask + OpenCV web app",
+  "repository": "https://github.com/<your-username>/<your-repo>",
+  "keywords": ["python", "flask", "opencv", "image-analysis"],
+  "stack": "heroku-22",
+  "buildpacks": [
+    { "url": "heroku/python" }
+  ],
+  "env": {
+    "PORT": {
+      "description": "Port the web process should listen on",
+      "value": "5000"
+    }
+  }
+}
