@@ -181,14 +181,15 @@
                     const efficacyBox = document.getElementById('efficacyBox');
                     efficacyBox.className = 'p-3 mb-4 rounded-3 text-white'; // Reset class
                     
-                    // *** แก้ไขเกณฑ์การแปลผลใน JavaScript ให้คูณ 10 ตาม Python ***
-                    if (density > 500) { // เดิม 50
+                    // *** แก้ไขเกณฑ์การแปลผลใน JavaScript ให้หาร 10 ตาม Python ***
+                    // เกณฑ์ใหม่: 5.0, 3.0, 2.0
+                    if (density > 5.0) { 
                         efficacyBox.classList.add('bg-success');
-                    } else if (density >= 300) { // เดิม 30
+                    } else if (density >= 3.0) { 
                         efficacyBox.classList.add('bg-info');
-                    } else if (density >= 200) { // เดิม 20
+                    } else if (density >= 2.0) { 
                         efficacyBox.classList.add('bg-warning');
-                    } else { // น้อยกว่า 200
+                    } else { // น้อยกว่า 2.0
                         efficacyBox.classList.add('bg-danger');
                     }
 
