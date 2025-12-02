@@ -176,20 +176,19 @@
                     document.getElementById('densityResult').textContent = results.droplets_per_sq_cm;
                     document.getElementById('efficacyText').textContent = `การแปลผล: ${results.efficacy_result}`;
                     
-                    // Set color based on efficacy
-                    const density = parseFloat(results.droplets_per_sq_cm.split(' ')[0]);
+                    // *** แก้ไข: ใช้ count ในการกำหนดสี ***
+                    const count = parseInt(results.count); 
                     const efficacyBox = document.getElementById('efficacyBox');
                     efficacyBox.className = 'p-3 mb-4 rounded-3 text-white'; // Reset class
                     
-                    // *** แก้ไขเกณฑ์การแปลผลใน JavaScript ให้หาร 10 ตาม Python ***
-                    // เกณฑ์ใหม่: 5.0, 3.0, 2.0
-                    if (density > 5.0) { 
+                    // เกณฑ์: 50 หยด (Excellent), 30 หยด (Good), 20 หยด (Fair)
+                    if (count > 50) { 
                         efficacyBox.classList.add('bg-success');
-                    } else if (density >= 3.0) { 
+                    } else if (count >= 30) { 
                         efficacyBox.classList.add('bg-info');
-                    } else if (density >= 2.0) { 
+                    } else if (count >= 20) { 
                         efficacyBox.classList.add('bg-warning');
-                    } else { // น้อยกว่า 2.0
+                    } else { // น้อยกว่า 20
                         efficacyBox.classList.add('bg-danger');
                     }
 
