@@ -98,11 +98,11 @@ def analyze_droplets_core(img, paper_width, paper_height):
         droplets_per_sq_cm = 0.0
 
     # 7. แปลผลตามเกณฑ์ (ปรับเกณฑ์ให้สอดคล้องกับค่าที่คูณ 10 แล้ว)
-    if droplets_per_sq_cm > 500: # เกณฑ์เดิม 50
+    if droplets_per_sq_cm > 50: # เกณฑ์เดิม 50
         efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
-    elif droplets_per_sq_cm >= 300: # เกณฑ์เดิม 30
+    elif droplets_per_sq_cm >= 30: # เกณฑ์เดิม 30
         efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
-    elif droplets_per_sq_cm >= 200: # เกณฑ์เดิม 20
+    elif droplets_per_sq_cm >= 20: # เกณฑ์เดิม 20
         efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
     else:
         efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
