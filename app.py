@@ -4,7 +4,7 @@ import os
 import base64
 from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
-import tempfile # นำเข้า tempfile เพื่อจัดการไฟล์ชั่วคราว
+import tempfile 
 
 # --- Flask Configuration ---
 app = Flask(__name__)
@@ -16,43 +16,47 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection) ---
+# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity) ---
 def analyze_droplets_core(img, paper_width, paper_height):
     """
-    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง (ปรับปรุงเพื่อตรวจจับหลายสี)
+    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง (ปรับปรุงค่า Threshold และ Contour Filter)
     """
     
-    # 1. ปรับ contrast ด้วย CLAHE (ยังคงช่วยปรับปรุงคุณภาพภาพ)
+    # 1. ปรับ contrast ด้วย CLAHE
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    # เพิ่ม ClipLimit เล็กน้อยเพื่อเน้นรายละเอียด
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8,8)) 
     cl = clahe.apply(l)
     lab = cv2.merge((cl, a, b))
     img_enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     
-    # 2. การแปลงเป็น Grayscale และ Adaptive Thresholding เพื่อตรวจจับ 'สิ่งที่ไม่ใช่สีขาว'
-    # แปลงเป็น Grayscale
+    # 2. การแปลงเป็น Grayscale และ Adaptive Thresholding
     gray = cv2.cvtColor(img_enhanced, cv2.COLOR_BGR2GRAY)
     
-    # ใช้ Adaptive Thresholding เพื่อจัดการกับแสงที่ไม่สม่ำเสมอ
-    block_size = 31 # ต้องเป็นเลขคี่ที่ใหญ่กว่า 1
-    C = 10 # ค่าคงที่ที่ถูกลบออกจากค่าเฉลี่ย
-    # THRESH_BINARY_INV: ทำให้สิ่งที่มืดกว่า (หยดละออง) กลายเป็นสีขาว (255) และพื้นหลังสว่างกลายเป็นสีดำ (0)
+    # *** ปรับปรุงค่า Adaptive Thresholding ***
+    # ลด Block Size และ C เพื่อความละเอียดในการตรวจจับที่สูงขึ้น (High Sensitivity)
+    block_size = 21 # เล็กลงเพื่อจับรายละเอียดในพื้นที่แคบ
+    C = 5 # ลดลงเพื่อให้ภาพ Thresholding สะอาดขึ้น
+    
     mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                  cv2.THRESH_BINARY_INV, block_size, C)
     
     # 3. ทำความสะอาด mask (Morphological Operations)
-    kernel = np.ones((3,3), np.uint8)
-    # Open: ลบจุดรบกวน (Noise) ขนาดเล็ก
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
-    # Close: เชื่อมต่อหยดละอองที่อยู่ใกล้กันเล็กน้อยให้เป็น Contour เดียวกัน
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    kernel_small = np.ones((3,3), np.uint8)
+    kernel_large = np.ones((5,5), np.uint8)
 
+    # Open: ลบจุดรบกวน (Noise) ขนาดเล็กมาก
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1) 
+    # Close: เชื่อมต่อหยดละอองที่อยู่ใกล้กันเล็กน้อยให้เป็น Contour เดียวกัน
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_small, iterations=2)
+    
     # 4. หาขอบและนับจำนวนจุด (Contour Detection)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # กรอง Contours ที่เล็กเกินไป (Noise)
-    min_area_threshold = 50 # ปรับค่านี้ตามความเหมาะสม
+    # *** ปรับปรุงการกรอง Contour ***
+    # ลดค่า min_area_threshold ลงอย่างมาก เพื่อให้ตรวจจับหยดละอองขนาดเล็กได้
+    min_area_threshold = 10 # ลดลงเหลือ 10 เพื่อจับหยดเล็กๆ
     valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area_threshold]
     count = len(valid_contours)
 
@@ -67,10 +71,14 @@ def analyze_droplets_core(img, paper_width, paper_height):
         cv2.putText(output, str(i+1), (cx-10, cy), cv2.FONT_HERSHEY_SIMPLEX,
                     0.6, (255, 0, 0), 2, cv2.LINE_AA) 
     
+    # แสดงจำนวนหยดละอองที่ตรวจจับได้
     text = f"Droplets detected: {count}"
     cv2.putText(output, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 3, cv2.LINE_AA)
 
     # 6. คำนวณพื้นที่และวิเคราะห์ความหนาแน่น
+    paper_width = paper_width if paper_width > 0 else 1 # ป้องกันการหารด้วยศูนย์
+    paper_height = paper_height if paper_height > 0 else 1
+    
     paper_area_real = paper_width * paper_height
     paper_area_pixels = img.shape[0] * img.shape[1]
     
@@ -93,4 +101,80 @@ def analyze_droplets_core(img, paper_width, paper_height):
     if droplets_per_sq_cm > 50:
         efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
     elif droplets_per_sq_cm >= 30:
-        efficacy_
+        efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
+    elif droplets_per_sq_cm >= 20:
+        efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
+    else:
+        efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
+    
+    # ฟังก์ชันช่วยแปลงภาพ OpenCV เป็น Base64 string
+    def cv2_to_base64(img_cv):
+        is_success, buffer = cv2.imencode(".jpeg", img_cv, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        return base64.b64encode(buffer).decode("utf-8")
+    
+    original_img_base64 = cv2_to_base64(img)
+    output_img_base64 = cv2_to_base64(output)
+
+    # 7. เตรียมผลลัพธ์
+    results = {
+        "count": count,
+        "paper_area_real": f"{paper_area_real:.2f} cm²",
+        "drop_area_real": f"{drop_area_real:.2f} cm²",
+        "percent_coverage": f"{percent_coverage:.2f}%",
+        "droplets_per_sq_cm": f"{droplets_per_sq_cm:.2f} หยด/cm²",
+        "efficacy_result": efficacy_result
+    }
+
+    return results, original_img_base64, output_img_base64
+
+# --- Flask Routes ---
+
+@app.route('/')
+def index():
+    """หน้าหลักสำหรับอัปโหลดไฟล์"""
+    # ในการใช้งานจริง คุณต้องสร้างไฟล์ 'templates/index.html' แยกต่างหาก
+    return render_template('index.html') 
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """จัดการการอัปโหลดและการวิเคราะห์"""
+    
+    # 1. รับค่าจากฟอร์ม
+    try:
+        paper_width = float(request.form.get('paper_width'))
+        paper_height = float(request.form.get('paper_height'))
+    except (ValueError, TypeError):
+        return jsonify({"error": "ค่าความกว้างและความยาวไม่ถูกต้อง"}), 400
+
+    if 'file' not in request.files:
+        return jsonify({"error": "ไม่พบไฟล์ในคำขอ"}), 400
+    
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "ไม่ได้เลือกไฟล์"}), 400
+
+    if file and allowed_file(file.filename):
+        # 2. อ่านไฟล์เข้าสู่หน่วยความจำ
+        file_bytes = file.read()
+        np_arr = np.frombuffer(file_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+             return jsonify({"error": "ไม่สามารถอ่านไฟล์ภาพได้ โปรดตรวจสอบรูปแบบไฟล์"}), 400
+        
+        # 3. รันการวิเคราะห์
+        results, original_img_b64, output_img_b64 = analyze_droplets_core(img, paper_width, paper_height)
+
+        if "error" in results:
+             return jsonify(results), 500
+
+        # 4. ส่งผลลัพธ์กลับไปให้ JavaScript
+        return jsonify({
+            "success": True,
+            "results": results,
+            "original_image": f"data:image/jpeg;base64,{original_img_b64}",
+            "output_image": f"data:image/jpeg;base64,{output_img_b64}"
+        })
+
+    return jsonify({"error": "นามสกุลไฟล์ไม่ได้รับอนุญาต (ใช้ได้เฉพาะ png, jpg, jpeg)"}), 400
