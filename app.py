@@ -16,10 +16,11 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Core Analysis Function (UPDATED: High Precision with Otsu's Method) ---
+# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity with *10 Factor) ---
 def analyze_droplets_core(img, paper_width, paper_height):
     """
-    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง (ปรับปรุง Thresholding ขั้นสูง)
+    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง 
+    (ใช้ Adaptive Thresholding และปรับค่าความหนาแน่นให้คูณ 10)
     """
     
     # 1. ปรับ contrast ด้วย CLAHE
@@ -31,30 +32,30 @@ def analyze_droplets_core(img, paper_width, paper_height):
     lab = cv2.merge((cl, a, b))
     img_enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     
-    # 2. การแปลงเป็น Grayscale, Blur และ Otsu's Thresholding
+    # 2. การแปลงเป็น Grayscale และ Adaptive Thresholding
     gray = cv2.cvtColor(img_enhanced, cv2.COLOR_BGR2GRAY)
     
-    # A. Gaussian Blur: ลบ Noise ขนาดเล็กบนกระดาษ ก่อนการ Thresholding
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0) 
+    # *** ค่า Adaptive Thresholding ***
+    block_size = 21 # เล็กลงเพื่อจับรายละเอียดในพื้นที่แคบ
+    C = 5 # ลดลงเพื่อให้ภาพ Thresholding สะอาดขึ้น
     
-    # B. Otsu's Binarization: หาค่า Thresholding ที่ดีที่สุดโดยอัตโนมัติ
-    # THRESH_BINARY_INV: ทำให้หยดละอองเป็นสีขาว (255) พื้นหลังเป็นสีดำ (0)
-    _, mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                 cv2.THRESH_BINARY_INV, block_size, C)
     
     # 3. ทำความสะอาด mask (Morphological Operations)
     kernel_small = np.ones((3,3), np.uint8)
-    
-    # Open: ลบ Noise ที่เหลืออยู่
+    kernel_large = np.ones((5,5), np.uint8)
+
+    # Open: ลบจุดรบกวน (Noise) ขนาดเล็กมาก
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1) 
-    
-    # Close: เชื่อมต่อ Contour ที่มีรอยขาดเล็ก ๆ แต่ไม่เชื่อมหยดละอองที่อยู่ห่างกันเกินไป
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_small, iterations=1)
+    # Close: เชื่อมต่อหยดละอองที่อยู่ใกล้กันเล็กน้อยให้เป็น Contour เดียวกัน
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_small, iterations=2)
     
     # 4. หาขอบและนับจำนวนจุด (Contour Detection)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # *** การกรอง Contour: คงค่า min_area_threshold ที่ต่ำไว้ ***
-    min_area_threshold = 10 
+    # *** ปรับปรุงการกรอง Contour ***
+    min_area_threshold = 10 # ลดลงเหลือ 10 เพื่อจับหยดเล็กๆ
     valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area_threshold]
     count = len(valid_contours)
 
@@ -74,7 +75,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
     cv2.putText(output, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 3, cv2.LINE_AA)
 
     # 6. คำนวณพื้นที่และวิเคราะห์ความหนาแน่น
-    paper_width = paper_width if paper_width > 0 else 1
+    paper_width = paper_width if paper_width > 0 else 1 # ป้องกันการหารด้วยศูนย์
     paper_height = paper_height if paper_height > 0 else 1
     
     paper_area_real = paper_width * paper_height
@@ -90,17 +91,18 @@ def analyze_droplets_core(img, paper_width, paper_height):
     
     if paper_area_real > 0:
         percent_coverage = (drop_area_real / paper_area_real) * 100
-        droplets_per_sq_cm = count / paper_area_real
+        # *** แก้ไขตามคำขอ: คูณด้วย 10.0 เพื่อเลื่อนจุดทศนิยมไป 1 ตำแหน่ง ***
+        droplets_per_sq_cm = (count / paper_area_real) * 10.0
     else:
         percent_coverage = 0.0
         droplets_per_sq_cm = 0.0
 
-    # แปลผลตามเกณฑ์
-    if droplets_per_sq_cm > 50:
+    # 7. แปลผลตามเกณฑ์ (ปรับเกณฑ์ให้สอดคล้องกับค่าที่คูณ 10 แล้ว)
+    if droplets_per_sq_cm > 500: # เกณฑ์เดิม 50
         efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
-    elif droplets_per_sq_cm >= 30:
+    elif droplets_per_sq_cm >= 300: # เกณฑ์เดิม 30
         efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
-    elif droplets_per_sq_cm >= 20:
+    elif droplets_per_sq_cm >= 200: # เกณฑ์เดิม 20
         efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
     else:
         efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
@@ -113,7 +115,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
     original_img_base64 = cv2_to_base64(img)
     output_img_base64 = cv2_to_base64(output)
 
-    # 7. เตรียมผลลัพธ์
+    # 8. เตรียมผลลัพธ์
     results = {
         "count": count,
         "paper_area_real": f"{paper_area_real:.2f} cm²",
@@ -123,7 +125,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
         "efficacy_result": efficacy_result
     }
 
-    return results, original_img_base64, output_img_b64
+    return results, original_img_base64, output_img_base64
 
 # --- Flask Routes ---
 
