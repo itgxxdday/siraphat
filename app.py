@@ -78,17 +78,17 @@ def analyze_droplets_core(img, paper_width, paper_height):
     
     if paper_area_real > 0:
         percent_coverage = (drop_area_real / paper_area_real) * 100
-        droplets_per_sq_cm = (count / paper_area_real) / 10.0 # หาร 10 เพื่อแสดงผลเลขน้อย
+        droplets_per_sq_cm = (count / paper_area_real)
     else:
         percent_coverage = 0.0
         droplets_per_sq_cm = 0.0
 
     # 7. แปลผลตามเกณฑ์ (*** เกณฑ์ใหม่: 10, 5, 3 หยด ***)
-    if count > 10: 
+    if count > 5: 
         efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
-    elif count >= 5: 
-        efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
     elif count >= 3: 
+        efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
+    elif count >= 2: 
         efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
     else:
         efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
