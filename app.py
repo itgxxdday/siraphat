@@ -16,10 +16,11 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity) ---
+# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity with *10 Factor) ---
 def analyze_droplets_core(img, paper_width, paper_height):
     """
-    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง (ปรับปรุงค่า Threshold และ Contour Filter)
+    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง 
+    (ใช้ Adaptive Thresholding และปรับค่าความหนาแน่นให้คูณ 10)
     """
     
     # 1. ปรับ contrast ด้วย CLAHE
@@ -34,8 +35,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
     # 2. การแปลงเป็น Grayscale และ Adaptive Thresholding
     gray = cv2.cvtColor(img_enhanced, cv2.COLOR_BGR2GRAY)
     
-    # *** ปรับปรุงค่า Adaptive Thresholding ***
-    # ลด Block Size และ C เพื่อความละเอียดในการตรวจจับที่สูงขึ้น (High Sensitivity)
+    # *** ค่า Adaptive Thresholding ***
     block_size = 21 # เล็กลงเพื่อจับรายละเอียดในพื้นที่แคบ
     C = 5 # ลดลงเพื่อให้ภาพ Thresholding สะอาดขึ้น
     
@@ -55,7 +55,6 @@ def analyze_droplets_core(img, paper_width, paper_height):
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     # *** ปรับปรุงการกรอง Contour ***
-    # ลดค่า min_area_threshold ลงอย่างมาก เพื่อให้ตรวจจับหยดละอองขนาดเล็กได้
     min_area_threshold = 10 # ลดลงเหลือ 10 เพื่อจับหยดเล็กๆ
     valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area_threshold]
     count = len(valid_contours)
@@ -92,17 +91,18 @@ def analyze_droplets_core(img, paper_width, paper_height):
     
     if paper_area_real > 0:
         percent_coverage = (drop_area_real / paper_area_real) * 100
-        droplets_per_sq_cm = count / paper_area_real
+        # *** แก้ไขตามคำขอ: คูณด้วย 10.0 เพื่อเลื่อนจุดทศนิยมไป 1 ตำแหน่ง ***
+        droplets_per_sq_cm = (count / paper_area_real) * 10.0
     else:
         percent_coverage = 0.0
         droplets_per_sq_cm = 0.0
 
-    # แปลผลตามเกณฑ์
-    if droplets_per_sq_cm > 50:
+    # 7. แปลผลตามเกณฑ์ (ปรับเกณฑ์ให้สอดคล้องกับค่าที่คูณ 10 แล้ว)
+    if droplets_per_sq_cm > 500: # เกณฑ์เดิม 50
         efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
-    elif droplets_per_sq_cm >= 30:
+    elif droplets_per_sq_cm >= 300: # เกณฑ์เดิม 30
         efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
-    elif droplets_per_sq_cm >= 20:
+    elif droplets_per_sq_cm >= 200: # เกณฑ์เดิม 20
         efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
     else:
         efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
@@ -115,7 +115,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
     original_img_base64 = cv2_to_base64(img)
     output_img_base64 = cv2_to_base64(output)
 
-    # 7. เตรียมผลลัพธ์
+    # 8. เตรียมผลลัพธ์
     results = {
         "count": count,
         "paper_area_real": f"{paper_area_real:.2f} cm²",
