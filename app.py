@@ -16,16 +16,16 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity with *10 Factor) ---
+# --- Core Analysis Function (UPDATED: Multi-color Droplet Detection & High Sensitivity) ---
 def analyze_droplets_core(img, paper_width, paper_height):
     """
-    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง 
-    (ใช้ Adaptive Thresholding และปรับค่าความหนาแน่นให้คูณ 10)
+    ฟังก์ชันหลักสำหรับการวิเคราะห์ภาพหยดละออง (ปรับปรุงค่า Threshold และ Contour Filter)
     """
-    # ... ขั้นตอน 1-3 เหมือนเดิม (CLAHE, Adaptive Thresholding, Morphological Operations) ...
+    
     # 1. ปรับ contrast ด้วย CLAHE
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
+    # เพิ่ม ClipLimit เล็กน้อยเพื่อเน้นรายละเอียด
     clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8,8)) 
     cl = clahe.apply(l)
     lab = cv2.merge((cl, a, b))
@@ -33,106 +33,77 @@ def analyze_droplets_core(img, paper_width, paper_height):
     
     # 2. การแปลงเป็น Grayscale และ Adaptive Thresholding
     gray = cv2.cvtColor(img_enhanced, cv2.COLOR_BGR2GRAY)
-    block_size = 21 
-    C = 5 
+    
+    # *** ปรับปรุงค่า Adaptive Thresholding ***
+    # ลด Block Size และ C เพื่อความละเอียดในการตรวจจับที่สูงขึ้น (High Sensitivity)
+    block_size = 21 # เล็กลงเพื่อจับรายละเอียดในพื้นที่แคบ
+    C = 5 # ลดลงเพื่อให้ภาพ Thresholding สะอาดขึ้น
+    
     mask = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                  cv2.THRESH_BINARY_INV, block_size, C)
     
     # 3. ทำความสะอาด mask (Morphological Operations)
     kernel_small = np.ones((3,3), np.uint8)
+    kernel_large = np.ones((5,5), np.uint8)
+
+    # Open: ลบจุดรบกวน (Noise) ขนาดเล็กมาก
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1) 
+    # Close: เชื่อมต่อหยดละอองที่อยู่ใกล้กันเล็กน้อยให้เป็น Contour เดียวกัน
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_small, iterations=2)
     
-    # 4. หาขอบ, กรองรูปร่าง, และนับจำนวนจุด (Contour Detection & Filtering)
+    # 4. หาขอบและนับจำนวนจุด (Contour Detection)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # --- ตัวแปรสำหรับ Calibration ---
-    paper_width_cm = paper_width if paper_width > 0 else 1
-    paper_height_cm = paper_height if paper_height > 0 else 1
-    paper_area_real = paper_width_cm * paper_height_cm
-    paper_area_pixels = img.shape[0] * img.shape[1]
-    
-    # อัตราส่วน: cm² ต่อ pixel
-    pixel_to_real_ratio_area = paper_area_real / paper_area_pixels if paper_area_pixels > 0 else 0 
-    # อัตราส่วน: cm ต่อ pixel
-    pixel_to_real_ratio_linear = np.sqrt(pixel_to_real_ratio_area)
-
-    # --- เกณฑ์การคัดกรอง ---
-    min_area_threshold = 10 
-    min_circularity = 0.5 # หยดควรมีความกลมในระดับหนึ่ง (1.0 = กลมสมบูรณ์)
-    
-    valid_contours = []
-    diameters_pixels = []
-
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < min_area_threshold:
-            continue
-        
-        # ก. การกรองรูปร่าง (Circularity)
-        perimeter = cv2.arcLength(cnt, True)
-        if perimeter == 0:
-            continue
-            
-        # Circularity = 4*pi*Area / Perimeter^2 (1.0 คือวงกลมสมบูรณ์)
-        circularity = 4 * np.pi * area / (perimeter * perimeter)
-        if circularity < min_circularity:
-            continue
-            
-        # ข. การวัดขนาด
-        # ใช้ Bounding Circle ที่เล็กที่สุด
-        (x, y), radius = cv2.minEnclosingCircle(cnt)
-        diameter_pixels = 2 * radius
-        
-        diameters_pixels.append(diameter_pixels)
-        valid_contours.append(cnt)
-    
+    # *** ปรับปรุงการกรอง Contour ***
+    # ลดค่า min_area_threshold ลงอย่างมาก เพื่อให้ตรวจจับหยดละอองขนาดเล็กได้
+    min_area_threshold = 10 # ลดลงเหลือ 10 เพื่อจับหยดเล็กๆ
+    valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area_threshold]
     count = len(valid_contours)
-    
-    # 5. คำนวณขนาดเฉลี่ย
-    mean_diameter_pixels = np.mean(diameters_pixels) if count > 0 else 0
-    # แปลงจาก pixels เป็น micrometers (µm) - ค่าทั่วไปใช้หน่วยนี้
-    # 1 cm = 10,000 µm
-    mean_diameter_um = mean_diameter_pixels * pixel_to_real_ratio_linear * 10000 
-    
-    # 6. วาดขอบและหมายเลขบนภาพ
+
+    # 5. วาดขอบและหมายเลขบนภาพ
     output = img.copy()
-    cv2.drawContours(output, valid_contours, -1, (0, 0, 255), 2) 
+    cv2.drawContours(output, valid_contours, -1, (0, 0, 255), 2) # วาดเส้นขอบสีแดง
     for i, cnt in enumerate(valid_contours):
         x, y, w, h = cv2.boundingRect(cnt)
         cx = x + w//2
         cy = y + h//2
+        # วาดหมายเลขสีฟ้า
         cv2.putText(output, str(i+1), (cx-10, cy), cv2.FONT_HERSHEY_SIMPLEX,
                     0.6, (255, 0, 0), 2, cv2.LINE_AA) 
     
-    text = f"Droplets detected: {count} | Avg Dia: {mean_diameter_um:.0f} µm"
-    cv2.putText(output, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 100, 255), 2, cv2.LINE_AA)
+    # แสดงจำนวนหยดละอองที่ตรวจจับได้
+    text = f"Droplets detected: {count}"
+    cv2.putText(output, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 3, cv2.LINE_AA)
 
-    # 7. คำนวณพื้นที่และวิเคราะห์ความหนาแน่น
-    paper_area_real = paper_width_cm * paper_height_cm
+    # 6. คำนวณพื้นที่และวิเคราะห์ความหนาแน่น
+    paper_width = paper_width if paper_width > 0 else 1 # ป้องกันการหารด้วยศูนย์
+    paper_height = paper_height if paper_height > 0 else 1
+    
+    paper_area_real = paper_width * paper_height
+    paper_area_pixels = img.shape[0] * img.shape[1]
+    
+    if paper_area_pixels == 0:
+        return {"error": "ไม่สามารถคำนวณพื้นที่พิกเซลได้"}, None, None
+
+    pixel_to_real_ratio = paper_area_real / paper_area_pixels
+    # คำนวณพื้นที่ของหยดละอองจาก mask ที่ทำ Adaptive Thresholding
     drop_area_pixels = np.sum(mask > 0) 
-    drop_area_real = drop_area_pixels * pixel_to_real_ratio_area
+    drop_area_real = drop_area_pixels * pixel_to_real_ratio
     
     if paper_area_real > 0:
         percent_coverage = (drop_area_real / paper_area_real) * 100
-        # ใช้การหาร 10 ตามคำขอครั้งล่าสุด (เพื่อแสดงผล)
-        droplets_per_sq_cm = (count / paper_area_real) / 10.0
+        droplets_per_sq_cm = count / paper_area_real
     else:
         percent_coverage = 0.0
         droplets_per_sq_cm = 0.0
 
-    # 8. แปลผลตามเกณฑ์ใหม่ (*** เกณฑ์อิงจาก Count และ Size ***)
-    # เกณฑ์ทั่วไปสำหรับขนาดหยด: 
-    # 50-100 µm: Fine (ป้องกันแมลง)
-    # 100-300 µm: Medium (ป้องกันวัชพืช/โรคพืชทั่วไป)
-    # 300+ µm: Coarse (ยากต่อการปกคลุม)
-
-    if count > 50 and 100 <= mean_diameter_um <= 300:
-        efficacy_result = "ยอดเยี่ยม: จำนวนมากและขนาดเหมาะสมสำหรับการป้องกันโรคพืชและแมลง"
-    elif count >= 30 and 50 <= mean_diameter_um <= 350:
-        efficacy_result = "ดี: จำนวนพอใช้ แต่ขนาดอาจไม่เหมาะสมที่สุด (อาจเล็ก/ใหญ่ไป)"
-    elif count >= 20 and mean_diameter_um > 50:
-        efficacy_result = "พอใช้: จำนวนต่ำหรือขนาดไม่เหมาะสม ต้องปรับปรุงการพ่น"
+    # แปลผลตามเกณฑ์
+    if droplets_per_sq_cm > 50:
+        efficacy_result = "ยอดเยี่ยม: ป้องกันได้ทั้งโรคพืช, วัชพืช, และแมลงศัตรูพืช"
+    elif droplets_per_sq_cm >= 30:
+        efficacy_result = "ดี: ป้องกันแมลงและวัชพืชได้ แต่กันโรคพืชได้ไม่เพียงพอ"
+    elif droplets_per_sq_cm >= 20:
+        efficacy_result = "พอใช้: ป้องกันได้เฉพาะวัชพืชเท่านั้น"
     else:
         efficacy_result = "ต้องปรับปรุง: ประสิทธิภาพต่ำสำหรับการป้องกันทุกชนิด"
     
@@ -144,26 +115,31 @@ def analyze_droplets_core(img, paper_width, paper_height):
     original_img_base64 = cv2_to_base64(img)
     output_img_base64 = cv2_to_base64(output)
 
-    # 9. เตรียมผลลัพธ์
+    # 7. เตรียมผลลัพธ์
     results = {
         "count": count,
-        "mean_diameter_um": f"{mean_diameter_um:.0f} µm", # <-- เพิ่มผลลัพธ์ใหม่
         "paper_area_real": f"{paper_area_real:.2f} cm²",
         "drop_area_real": f"{drop_area_real:.2f} cm²",
         "percent_coverage": f"{percent_coverage:.2f}%",
         "droplets_per_sq_cm": f"{droplets_per_sq_cm:.2f} หยด/cm²",
-        "efficacy_result": efficacy_result 
+        "efficacy_result": efficacy_result
     }
 
     return results, original_img_base64, output_img_base64
 
-# --- อัปเดตการใช้งาน Flask Route ---
-# คุณต้องเปลี่ยนฟังก์ชันที่ถูกเรียกใน route '/analyze' จาก 'analyze_droplets_core' 
-# เป็น 'analyze_droplets_core_improved'
+# --- Flask Routes ---
+
+@app.route('/')
+def index():
+    """หน้าหลักสำหรับอัปโหลดไฟล์"""
+    # ในการใช้งานจริง คุณต้องสร้างไฟล์ 'templates/index.html' แยกต่างหาก
+    return render_template('index.html') 
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    # ... (ส่วนรับค่าจากฟอร์มเหมือนเดิม) ...
+    """จัดการการอัปโหลดและการวิเคราะห์"""
+    
+    # 1. รับค่าจากฟอร์ม
     try:
         paper_width = float(request.form.get('paper_width'))
         paper_height = float(request.form.get('paper_height'))
@@ -187,7 +163,7 @@ def analyze():
         if img is None:
              return jsonify({"error": "ไม่สามารถอ่านไฟล์ภาพได้ โปรดตรวจสอบรูปแบบไฟล์"}), 400
         
-        # 3. รันการวิเคราะห์ด้วยฟังก์ชันที่ปรับปรุงแล้ว
+        # 3. รันการวิเคราะห์
         results, original_img_b64, output_img_b64 = analyze_droplets_core(img, paper_width, paper_height)
 
         if "error" in results:
