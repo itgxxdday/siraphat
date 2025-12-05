@@ -78,7 +78,7 @@ def analyze_droplets_core(img, paper_width, paper_height):
     
     if paper_area_real > 0:
         percent_coverage = (drop_area_real / paper_area_real) * 100
-        droplets_per_sq_cm = (count / paper_area_real)
+        droplets_per_sq_cm = (count / paper_area_real) * 10
     else:
         percent_coverage = 0.0
         droplets_per_sq_cm = 0.0
