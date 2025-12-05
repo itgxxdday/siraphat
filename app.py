@@ -188,7 +188,7 @@ def analyze():
              return jsonify({"error": "ไม่สามารถอ่านไฟล์ภาพได้ โปรดตรวจสอบรูปแบบไฟล์"}), 400
         
         # 3. รันการวิเคราะห์ด้วยฟังก์ชันที่ปรับปรุงแล้ว
-        results, original_img_b64, output_img_b64 = analyze_droplets_core_improved(img, paper_width, paper_height) # <--- เปลี่ยนตรงนี้!
+        results, original_img_b64, output_img_b64 = analyze_droplets_core(img, paper_width, paper_height)
 
         if "error" in results:
              return jsonify(results), 500
